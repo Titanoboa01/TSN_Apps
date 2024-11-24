@@ -1,36 +1,54 @@
-from prometheus_client import start_http_server, Gauge
+import requests
 import subprocess
 import re
 import time
 
-gate_interval_metric = Gauge('taprio_gate_interval', 'Interval time for each gate', ['gate_id'])
+INFLUXDB_URL = "http://193.224.20.121:5050/api/v2/write"
+INFLUXDB_BUCKET = "tsn_data"
+INFLUXDB_ORG = "tsn_org"
+INFLUXDB_TOKEN = "cVk0-k1WE_TxDC4LXRjKRTaitiSoYamrZdL_fjKaAsRUBw8sP2F3FBYIerLBcSypf3nZg723MNIM-zqBK03egQ=="
 
-def parse_tc_output():
+def send_to_influxdb(measurement, tags, fields):
     """
-    Futtatja a `tc qdisc show dev eno1d1` parancsot, és kinyeri a `gatemask`-hoz és `interval`-hoz tartozó adatokat.
+    Adatok küldése az InfluxDB-be Line Protocol formátumban.
     """
+    line_protocol = f"{measurement},{tags} {fields}"
+    print(f"DEBUG: {line_protocol}")
+    headers = {"Authorization": f"Token {INFLUXDB_TOKEN}"}
+    response = requests.post(
+        f"{INFLUXDB_URL}?bucket={INFLUXDB_BUCKET}&org={INFLUXDB_ORG}&precision=ns",
+        headers=headers,
+        data=line_protocol
+    )
+    if response.status_code != 204:
+        print(f"Failed to write to InfluxDB: {response.text}")
+
+def parse_and_collect_taprio():
+    """
+    Lekéri és feldolgozza a `tc qdisc show dev` parancs kimenetét.
+    """
+    process = subprocess.Popen(['tc', 'qdisc', 'show', 'dev', 'eno1d1'], stdout=subprocess.PIPE, text=True)
+    output = process.communicate()[0]
+
+    for line in output.splitlines():
+        if 'index' in line and 'gatemask' in line:
+            match = re.search(r'index (\d+) cmd S gatemask 0x(\w+) interval (\d+)', line)
+            if match:
+                gate_index = int(match.group(1))
+                gatemask_hex = match.group(2)
+                interval = int(match.group(3))
+
+                gate_id = int(gatemask_hex, 16).bit_length() - 1
+
+                tags = f"device=eno1d1,gate_id={gate_id},gate_index={gate_index}"
+                fields = f"interval={interval}"
+                send_to_influxdb("taprio_metrics", tags, fields)
+
+if __name__ == "__main__":
     try:
-        result = subprocess.check_output(['tc', 'qdisc', 'show', 'dev', 'eno1d1'], text=True)
-        
-        for match in re.finditer(r'gatemask (0x[0-9a-fA-F]+) interval (\d+)', result):
-            gatemask = match.group(1)
-            interval = int(match.group(2))
-
-            gate_id = int(gatemask, 16).bit_length() - 1
-
-            gate_interval_metric.labels(gate_id=gate_id).set(interval)
-            print(f"Frissített metrika: gate_id={gate_id}, interval={interval}")
-
-    except subprocess.CalledProcessError as e:
-        print(f"Hiba a tc parancs futtatása közben: {e}")
-    except Exception as e:
-        print(f"Általános hiba: {e}")
-
-if __name__ == '__main__':
-    start_http_server(6012)
-
-    print("Taprio exporter fut...")
-    while True:
-        parse_tc_output()
-        time.sleep(1)
+        while True:
+            parse_and_collect_taprio()
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("Exit")
 
