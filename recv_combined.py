@@ -1,43 +1,51 @@
-from prometheus_client import start_http_server, Gauge
+import requests
 import subprocess
 import re
-import time
-from datetime import datetime
+from decimal import Decimal
 
-sequence_id_metric = Gauge('recv_sequence_id', 'Sequence ID metric', ['src_ip', 'dst_ip', 'run_id'])
-recv_rx_hw_metric = Gauge('recv_rx_hw', 'Receive RX HW metric', ['src_ip', 'dst_ip', 'run_id'])
-recv_rx_sw_metric = Gauge('recv_rx_sw', 'Receive RX SW metric', ['src_ip', 'dst_ip', 'run_id'])
-run_id_metric = Gauge('recv_run_id', 'Run ID metric', ['src_ip', 'dst_ip', 'run_id'])
-recv_send_time_metric = Gauge('recv_send_time', 'Recv send time metric', ['src_ip', 'dst_ip', 'run_id'])
+INFLUXDB_URL = "http://193.224.20.121:5050/api/v2/write"
+INFLUXDB_BUCKET = "tsn_data"
+INFLUXDB_ORG = "tsn_org"
+INFLUXDB_TOKEN = "cVk0-k1WE_TxDC4LXRjKRTaitiSoYamrZdL_fjKaAsRUBw8sP2F3FBYIerLBcSypf3nZg723MNIM-zqBK03egQ=="
 
-def parse_and_collect_recv_output():
+def send_to_influxdb(measurement, tags, fields):
+    line_protocol = f"{measurement},{tags} {fields}"
+    print(f"DEBUG: {line_protocol}")
+    headers = {"Authorization": f"Token {INFLUXDB_TOKEN}"}
+    response = requests.post(
+        f"{INFLUXDB_URL}?bucket={INFLUXDB_BUCKET}&org={INFLUXDB_ORG}&precision=ns",
+        headers=headers,
+        data=line_protocol
+    )
+    if response.status_code != 204:
+        print(f"Failed to write to InfluxDB: {response.text}")
+
+def parse_and_send_recv_output():
     process = subprocess.Popen(['./recv', '--iface', 'eno1d1'], stdout=subprocess.PIPE, text=True)
-    run_id = None
-    src_ip = None
-    dst_ip = None
-    for line in iter(process.stdout.readline, ''):
-        if 'ETH IPv4' in line:
-            match = re.search(r'IPv4 ([\d\.]+) -> ([\d\.]+)', line)
-            if match:
-                src_ip = match.group(1)
-                dst_ip = match.group(2)
-        if 'sequenceId' in line:
-            match = re.search(r'sequenceId (\d+) time (\d+\.\d+) RX SW (\d+\.\d+) HW (\d+\.\d+)', line)
-            if match:
-                sequence_id = int(match.group(1))
-                if run_id is None:
-                    run_id = match.group(2).split('.')[0]
-                send_time = float(match.group(2))
-                recv_rx_sw = float(match.group(3))
-                recv_rx_hw = float(match.group(4))
+    src_ip, dst_ip, run_id = None, None, None
+    try:
+        for line in iter(process.stdout.readline, ''):
+            if 'ETH IPv4' in line:
+                match = re.search(r'IPv4 ([\d\.]+) -> ([\d\.]+)', line)
+                if match:
+                    src_ip = match.group(1)
+                    dst_ip = match.group(2)
+                match = re.search(r'sequenceId (\d+) time (\d+\.\d+) RX SW (\d+\.\d+) HW (\d+\.\d+)', line)
+                if match:
+                    sequence_id = int(match.group(1))
+                    recv_send_time = Decimal(match.group(2))
+                    recv_rx_sw = Decimal(match.group(3))
+                    recv_rx_hw = Decimal(match.group(4))
+                    if run_id is None:
+                        run_id = match.group(2).split('.')[0]
 
-                if src_ip is not None and dst_ip is not None:
-                    sequence_id_metric.labels(src_ip, dst_ip, run_id).set(sequence_id)
-                    recv_send_time_metric.labels(src_ip, dst_ip, run_id).set(send_time)
-                    recv_rx_hw_metric.labels(src_ip, dst_ip, run_id).set(recv_rx_hw)
-                    recv_rx_sw_metric.labels(src_ip, dst_ip, run_id).set(recv_rx_sw)
+                    tags = f"src_ip={src_ip},dst_ip={dst_ip},run_id={run_id}"
+                    fields = (f"recv_sequence_id={Decimal(sequence_id)},recv_send_time={Decimal(recv_send_time):.9f},recv_rx_sw={Decimal(recv_rx_sw):.9f},recv_rx_hw={Decimal(recv_rx_hw):.9f}")
+                    send_to_influxdb("recv_metrics", tags, fields)
+    except KeyboardInterrupt:
+        print("\nExit")
+        process.terminate()
+        process.wait()
 
-if __name__ == '__main__':
-    start_http_server(6011)
-
-    parse_and_collect_recv_output()
+if __name__ == "__main__":
+    parse_and_send_recv_output()
