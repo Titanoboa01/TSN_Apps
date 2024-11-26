@@ -9,9 +9,6 @@ INFLUXDB_ORG = "tsn_org"
 INFLUXDB_TOKEN = "cVk0-k1WE_TxDC4LXRjKRTaitiSoYamrZdL_fjKaAsRUBw8sP2F3FBYIerLBcSypf3nZg723MNIM-zqBK03egQ=="
 
 def send_to_influxdb(measurement, tags, fields):
-    """
-    Adatok küldése az InfluxDB-be Line Protocol formátumban.
-    """
     line_protocol = f"{measurement},{tags} {fields}"
     print(f"DEBUG: {line_protocol}")
     headers = {"Authorization": f"Token {INFLUXDB_TOKEN}"}
@@ -24,9 +21,6 @@ def send_to_influxdb(measurement, tags, fields):
         print(f"Failed to write to InfluxDB: {response.text}")
 
 def parse_and_collect_taprio():
-    """
-    Lekéri és feldolgozza a `tc qdisc show dev` parancs kimenetét.
-    """
     process = subprocess.Popen(['tc', 'qdisc', 'show', 'dev', 'eno1d1'], stdout=subprocess.PIPE, text=True)
     output = process.communicate()[0]
 
