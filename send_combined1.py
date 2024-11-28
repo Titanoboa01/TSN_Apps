@@ -21,7 +21,7 @@ def send_to_influxdb(measurement, tags, fields):
     if response.status_code != 204:
         print(f"Failed to write to InfluxDB: {response.text}")
 def parse_and_send_send_output():
-    process = subprocess.Popen(['./send', '--sockprio=1', '--offset', '400', '--interval', '1000', '--iface', 'eno1d1', '--dst-ip=10.10.1.2'], stdout=subprocess.PIPE, text=True)
+    process = subprocess.Popen(['./send', '--sockprio=1', '--offset', '200', '--interval', '1000', '--iface', 'eno1d1', '--dst-ip=10.10.1.2'], stdout=subprocess.PIPE, text=True)
     src_ip, dst_ip, send_interval, start_offset, run_id = None, None, None, None, None
     try:
         for line in iter(process.stdout.readline, ''):
