@@ -21,7 +21,7 @@ def send_to_influxdb(measurement, tags, fields):
         print(f"Failed to write to InfluxDB: {response.text}")
 
 def parse_and_collect_taprio():
-    process = subprocess.Popen(['tc', 'qdisc', 'show', 'dev', 'eno1d1'], stdout=subprocess.PIPE, text=True)
+    process = subprocess.Popen(['tc', 'qdisc', 'show', 'dev', 'enp1s0f0'], stdout=subprocess.PIPE, text=True)
     output = process.communicate()[0]
 
     for line in output.splitlines():

@@ -1,14 +1,12 @@
 #!/bin/bash
 
-sudo python3 send_combined1.py &
+sudo python3 recv_combined.py &
 PID1=$!
 
-usleep 1000
-
-sudo python3 send_combined2.py &
+sudo python3 recv_combined2.py &
 PID2=$!
 
-sleep 10
+sleep 20
 
 sudo pkill -P $PID1
 sudo pkill -P $PID2

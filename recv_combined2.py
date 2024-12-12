@@ -21,7 +21,7 @@ def send_to_influxdb(measurement, tags, fields):
         print(f"Failed to write to InfluxDB: {response.text}")
 
 def parse_and_send_recv_output():
-    process = subprocess.Popen(['./recv', '--iface', 'enp1s0f0', '--port=319'], stdout=subprocess.PIPE, text=True)
+    process = subprocess.Popen(['./recv', '--port=320', '--iface', 'enp1s0f0'], stdout=subprocess.PIPE, text=True)
     src_ip, dst_ip, run_id = None, None, None
     toggle = True
     try:
